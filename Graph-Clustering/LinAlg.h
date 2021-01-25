@@ -150,16 +150,6 @@ public:
 	}
 };
 
-// Vector class for better handling of algorithms
-class Vector : public Matrix {
-protected:
-	n = 1;
-public:
-	Vector() {
-		n = 1;
-	}
-};
-
 // Functions for the creation of matrices
 Matrix Diag(vector<double> DiagEntries) {
 	/* Create a diagonal matrix with diagonal entries provided in a vector */
@@ -173,7 +163,7 @@ Matrix Eye(int n) {
 // Linear Algebra Functions using Matrices
 // These are declared outside of the Matrix class declaration to allow use of elemetary matrices
 // This simplifies the writing of our algorithms
-Vector Solve(Matrix A, Vector s) {
+Matrix Solve(Matrix A, Matrix s) {
 	/* Solve a system of equations based on matrix of equations and vector of solutions
 	Given Ax = s we want to find the vector x */
 }
