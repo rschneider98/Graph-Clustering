@@ -2,10 +2,13 @@
 //
 
 #include <iostream>
+#include "LinAlg.h"
 
 int main()
 {
-    std::cout << "Hello World!\n";
+	LinAlg::Matrix test(1, 2);
+    std::cout << test[1,1];
+	return 0;
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
