@@ -2,12 +2,19 @@
 //
 
 #include <iostream>
+#include <vector>
 #include "LinAlg.h"
 
 int main()
 {
-	LinAlg::Matrix test(1, 2);
-    std::cout << test[1,1];
+	std::vector<std::vector<double>> myVect {
+		{1, 2, 3},
+		{4, 5, 6},
+		{7, 8, 9}
+	};
+
+	LinAlg::Matrix test1(1, 2);
+    std::cout << test1.at(1,1);
 	return 0;
 }
 
