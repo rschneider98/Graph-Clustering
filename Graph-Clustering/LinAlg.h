@@ -3,9 +3,13 @@
    24 JAN 2021
    Matrix Structure and Algorithms for Spectral Graph Clustering 
    FOR EDUCATIONAL PURPOSES, this is not designed or tested for use
-   beyond algorithm implementation. */
+   beyond algorithm implementation. Large scale and sparse matrices
+   are also not considered since most operations produce new matrices
+   and everything is stored as a dense matrix. */
 
 #include <iostream>
+#include <algorithm>
+#include <cmath>
 #include <exception>
 #include <vector>
 #include <omp.h>
@@ -49,11 +53,22 @@ class NotSquare : public std::exception {
 	}
 };
 
-class NoInverse : public std::exception {
+class UnderDetermined : public std::exception {
 	virtual const char* what() const throw() {
-		return "Only square matries that are linearly independent can have a non-zero determinant and an inverse";
+		return "In order to be solved numerically, the matrix must have more rows than columns";
 	}
 };
+
+
+class Matrix;
+Matrix Diag(std::vector<double> diag_entries);
+Matrix Eye(int n);
+double InnerProduct(std::vector<double> u, std::vector<double> v);
+std::vector<double> proj(std::vector<double> u, std::vector<double> v);
+std::vector<double> operator+(std::vector<double> u, std::vector<double> v);
+std::vector<double> operator-(std::vector<double> u, std::vector<double> v);
+std::vector<double> operator*(std::vector<double> u, double c);
+
 
 // Matrix class since that is the base data structure of Linear Algebra
 class Matrix {
@@ -65,7 +80,9 @@ protected:
 
 public:
 	// empty constructor
-	Matrix() {}
+	Matrix() {
+		m = 0; n = 0;
+	}
 	// constructor with shape (defaults to zeros)
 	Matrix(int m, int n) {
 		this->m = m;
@@ -251,6 +268,20 @@ public:
 		}
 	}
 
+	Matrix Augment(Matrix& rhs) {
+		/* This function takes two matrices and returns one concat. */
+		// Verify they have the same number of rows
+		if (m != rhs.m) { throw UnevenCols(); }
+		int new_n = n + rhs.n;
+		Matrix out = *this;
+		#pragma omp parallel for
+		for (int i = 0; i < m; i++) {
+			for (int j = n; j < new_n; j++) {
+				out[i][j] = rhs[i][j - n];
+			}
+		}
+		return out;
+	}
 
 	// Other Basic Linear Algebra Functions
 	Matrix T() {
@@ -326,7 +357,7 @@ public:
 			double other, factor;
 			for (int i = current_row + 1; i < m; i++) {
 				other = temp[i][current_row];
-				factor = other / front;
+				factor = -1 * (other / front);
 				temp.RowAdd(current_row, i, factor);
 				// det. of row addition is 1 (multiplicative identity)
 			}
@@ -338,6 +369,96 @@ public:
 		}
 
 		return det;
+	}
+	Matrix RREF(int aug = 0) {
+		/* This function is meant to find the reduced row echolon form of 
+		a matrix and return the new matrix. This is similar to the determinant
+		function, but they cannot be combined because of restrictions on 
+		square matrices and how the elementary functions affect the 
+		calculation of the determinant. */
+		// get number of columns to consider in matrix (if the matrix is augmented or not)
+		// this defaults to 0 columns in the augmented section
+		int num_rows = m;
+		int num_cols = n - aug;
+		int num_iter = std::min(num_rows, num_cols);
+		// copy our matrix to get the output matrix that we will manipulate
+		Matrix out = *this;
+		/* We will increment the rows as we convert the bottom triangle into
+		zeros to keep track of level. */
+		for (int current_row = 0; current_row < num_iter; current_row++) {
+			double front = out[current_row][current_row];
+			// if the leading term is zero, we will need to do a row swap
+			if (front <= 1e-16) {
+				int i = current_row;
+				while ((i < m) && (out[i][current_row] <= 1e-16)) {
+					i++;
+				}
+				if ((i != current_row) && (out[current_row][i] > 1e-16)) {
+					// update our data format so that we have swapped these rows
+					out.RowSwap(current_row, i);
+				}
+			}
+			// get new front
+			front = out[current_row][current_row];
+			// make sure that we did find a non zero entry for this row, if
+			// not then we can skip this algebra bit
+			if (front > 1e-16) {
+				// use row multiplication to reduce this initial value to one
+				out.RowMul(current_row, (1 / front));
+				// now we want to use row addition of the current row
+				// to make the columns below set to zero
+				double other;
+				for (int i = current_row + 1; i < m; i++) {
+					other = out[i][current_row];
+					out.RowAdd(current_row, i, -1 * other);
+				}
+			}
+		}
+		// we now have an upper-triangular matrix and need to 
+		// remove values above the diagonal
+		for (int current_row = num_iter; current_row > 0; current_row--) {
+			double front = out[current_row][current_row];
+			// if this value is nonzero
+			if (front > 1e-16) {
+				for (int i = 0; i < current_row; i++) {
+					out.RowAdd(current_row, i, -1 * out[i][current_row]);
+				}
+			}
+		}
+		return out;
+	}
+	std::vector<double> Solve(std::vector<double> x) {
+		/* Solve the matrix for solutions x */
+		// Make sure that there is probably enough rows to solve the problem
+		if (m < n) { throw UnderDetermined(); }
+		// Verify the size of x is equivalent to the number of rows
+		if (m != x.size()) { throw UnevenCols(); }
+		// Create an augmented matrix 
+		Matrix temp_vector = Matrix(m, 1);
+		for (int i = 0; i < m; i++) {
+			temp_vector[i][0] = x[i];
+		}
+		Matrix comp = Augment(temp_vector);
+		Matrix solve = comp.RREF(1);
+		// Verify that we have a solution, meaning the diagonal
+		// entries are all zeros
+		for (int i = 0; i < n; i++) {
+			if (std::abs(solve[i][i]) <= 1e-16) { throw UnderDetermined(); }
+		}
+		std::vector<double> solutions(m, 0);
+		for (int i = 0; i < n; i++) {
+			solutions[i] = solve[m][i];
+		}
+
+		return solutions;
+	}
+	Matrix GramSchmidt() {
+		/* Here we apply the Gram-Schmidt process to this matrix to 
+		find an orthogonal basis. There are a couple of functions needed
+		to compute this, specifically the inner product of two vectors
+		and the projection of two vectors. */
+
+
 	}
 };
 
@@ -356,7 +477,6 @@ Matrix Diag(std::vector<double> diag_entries) {
 	}
 	return out;
 }
-
 Matrix Eye(int n) {
 	/* Create an identity matrix of size n */
 	// check that n is positive
@@ -367,11 +487,69 @@ Matrix Eye(int n) {
 	return Diag(diag_entries);
 }
 
+
+// Helper Functions for Vectors
+double InnerProduct(std::vector<double> u, std::vector<double> v) {
+	/* This computes the inner product of two vectors (also known as
+	the dot product) */
+	if (u.size() != v.size()) { throw UnequalDim(); }
+	int len = u.size();
+	double out;
+	for (int i = 0; i < len; i++) {
+		out += u[i] * v[i];
+	}
+	return out;
+}
+
+std::vector<double> proj(std::vector<double> u, std::vector<double> v) {
+	/* This function finds the projection of v onto u 
+	proj_u (v) = \frac{<u, v>}{<u, u>}u
+	*/
+	if (u.size() != v.size()) { throw UnequalDim(); }
+	double num = InnerProduct(u, v);
+	double denom = InnerProduct(u, u);
+	if (std::abs(denom) <= 1e-16) { return std::vector<double> (v.size(), 0); }
+	return u * (num / denom);
+}
+
+std::vector<double> operator+(std::vector<double> u, std::vector<double> v) {
+	/* This function is vector addition performed element-wise */
+	// Verify both vectors are the same length
+	if (u.size() != v.size()) { throw UnequalDim(); }
+	std::vector<double> out(u.size(), 0);
+	#pragma omp parallel for 
+	for (int i = 0; i < u.size(); i++) {
+		out[i] = u[i] + v[i];
+	}
+	return out;
+}
+
+std::vector<double> operator-(std::vector<double> u, std::vector<double> v) {
+	/* This function is vector subtraction performed element-wise */
+	// Verify both vectors are the same length
+	if (u.size() != v.size()) { throw UnequalDim(); }
+	std::vector<double> out(u.size(), 0);
+	#pragma omp parallel for 
+	for (int i = 0; i < u.size(); i++) {
+		out[i] = u[i] - v[i];
+	}
+	return out;
+}
+
+std::vector<double> operator*(std::vector<double> u, double c) {
+	/* This function is vector scalar multiplication performed element-wise */
+	std::vector<double> out = u;
+	#pragma omp parallel for 
+	for (int i = 0; i < u.size(); i++) {
+		out[i] *= c;
+	}
+	return out;
+}
+
+
+
 // Linear Algebra Functions using Matrices
 // These are declared outside of the Matrix class declaration to simplify the writing of our algorithms
-Matrix Solve(Matrix A, Matrix s) {
-	/* Solve a system of equations based on matrix of equations and vector of solutions
-	Given Ax = s we want to find the vector x */
-}
+
 
 }
