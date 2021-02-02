@@ -13,6 +13,7 @@
 #include <utility> 
 #include <cmath>
 #include <vector>
+#include <string>
 #include <omp.h>
 
 namespace LinAlg {
@@ -359,6 +360,16 @@ public:
 		n = rhs.n;
 		data = rhs.data;
 	}
+	friend std::ostream& operator<<(std::ostream& out, Matrix &rhs) {
+		/* Print out the matrix */
+		for (int i = 0; i < rhs.m; i++) {
+			for (int j = 0; j < rhs.n; j++) {
+				out << std::to_string(rhs.data[i][j]) << " ";
+			}
+			out << std::endl;
+		}
+		return out;
+	}
 
 
 	// Elementary Row Operations
@@ -682,10 +693,5 @@ Matrix Eye(int n) {
 	std::vector<double> diag_entries(n, 1);
 	return Diag(diag_entries);
 }
-
-
-// Linear Algebra Functions using Matrices
-// These are declared outside of the Matrix class declaration to simplify the writing of our algorithms
-
 
 }
