@@ -8,9 +8,10 @@
    and everything is stored as a dense matrix. */
 
 #include <iostream>
-#include <algorithm>
-#include <cmath>
 #include <exception>
+#include <algorithm>
+#include <utility> 
+#include <cmath>
 #include <vector>
 #include <omp.h>
 
@@ -61,13 +62,103 @@ class UnderDetermined : public std::exception {
 
 
 class Matrix;
+class Vector;
 Matrix Diag(std::vector<double> diag_entries);
 Matrix Eye(int n);
-double InnerProduct(std::vector<double> u, std::vector<double> v);
-std::vector<double> proj(std::vector<double> u, std::vector<double> v);
-std::vector<double> operator+(std::vector<double> u, std::vector<double> v);
-std::vector<double> operator-(std::vector<double> u, std::vector<double> v);
-std::vector<double> operator*(std::vector<double> u, double c);
+
+
+// Create a Vector class that is just a wrapper for std::vector with 
+// so overloaded operators don't affect other operations
+class Vector {
+protected:
+	std::vector<double> data;
+public:
+	// constructors
+	Vector() {};
+	Vector(int len, double fill) {
+		data = std::vector<double>(len, fill);
+	}
+	Vector(std::vector<double> my_vect) {
+		data = my_vect;
+	}
+
+	// Operator Overloading
+	double& operator[](int i) {
+		/* This function returns the address of the double at index.
+		so this can be used to update and get data. */
+		return data[i];
+	}
+	Vector operator+(Vector rhs) {
+		/* This function is vector addition performed element-wise */
+		// Verify both vectors are the same length
+		if (data.size() != rhs.data.size()) { throw UnequalDim(); }
+		Vector out(data.size(), 0);
+#pragma omp parallel for 
+		for (int i = 0; i < data.size(); i++) {
+			out[i] = data[i] + rhs[i];
+		}
+		return out;
+	}
+	Vector operator-(Vector rhs) {
+		/* This function is vector subtraction performed element-wise */
+		// Verify both vectors are the same length
+		if (data.size() != rhs.data.size()) { throw UnequalDim(); }
+		Vector out(data.size(), 0);
+#pragma omp parallel for 
+		for (int i = 0; i < data.size(); i++) {
+			out[i] = data[i] - rhs[i];
+		}
+		return out;
+	}
+	Vector operator*(double c) {
+		/* This function is vector scalar multiplication performed element-wise */
+		Vector out(*this);
+#pragma omp parallel for 
+		for (int i = 0; i < data.size(); i++) {
+			out[i] *= c;
+		}
+		return out;
+	}
+	Vector operator=(Vector rhs) {
+		/* This function is vector scalar multiplication performed element-wise */
+		Vector out(rhs.data);
+		return out;
+	}
+	double mag() {
+		/* Returns the magnitude of the vector, also known as the absolute value or length */
+		double out = 0;
+		for (int i = 0; i < data.size(); i++) {
+			out += std::pow(data[i], 2);
+		}
+		return std::sqrt(out);
+	}
+
+	// Helper Functions for Vectors
+	int size() {
+		return data.size();
+	}
+	double InnerProduct(Vector rhs) {
+		/* This computes the inner product of two vectors (also known as
+		the dot product) */
+		if (data.size() != rhs.data.size()) { throw UnequalDim(); }
+		int len = data.size();
+		double out = 0;
+		for (int i = 0; i < len; i++) {
+			out += data[i] * rhs[i];
+		}
+		return out;
+	}
+	Vector proj(Vector rhs) {
+		/* This function finds the projection of v onto u
+		proj_u (v) = \frac{<u, v>}{<u, u>}u
+		*/
+		if (data.size() != rhs.data.size()) { throw UnequalDim(); }
+		double num = (*this).InnerProduct(rhs);
+		double denom = (*this).InnerProduct((*this));
+		if (std::abs(denom) <= 1e-16) { return std::vector<double>(rhs.data.size(), 0); }
+		return (*this) * (num / denom);
+	}
+};
 
 
 // Matrix class since that is the base data structure of Linear Algebra
@@ -111,6 +202,29 @@ public:
 		}
 		// we have validated the input data and can keep it
 		this->data = data;
+	}
+	// constructer based on merging column vectors
+	Matrix(std::vector<Vector> cols) {
+		// get number of columns
+		n = cols.size();
+		// verify there is at least one column
+		if (n == 0) { throw ZeroCols(); }
+		// get number of rows in first column
+		m = cols[0].size();
+		// verify that there is at least one row
+		if (m == 0) { throw ZeroRows(); }
+		// verify that all columns have same number of rows
+		for (int i = 0; i < n; i++) {
+			if (cols[i].size() != m) { throw UnevenCols(); }
+		}
+		// create our data structure
+		data = std::vector<std::vector<double>>(m, (std::vector<double>(n, 0)));
+		#pragma omp parallel for
+		for (int i = 0; i < m; i++) {
+			for (int j = 0; j < n; j++) {
+				data[i][j] = cols[j][i];
+			}
+		}
 	}
 		
 
@@ -282,6 +396,21 @@ public:
 		}
 		return out;
 	}
+	Vector GetCol(int col_num) {
+		/* This function creates a vector based on the column number */
+		// Output Vector
+		Vector out(m, 0);
+		#pragma omp parallel for
+		for (int i = 0; i < m; i++) {
+			out[i] = data[i][col_num];
+		}
+		return out;
+	}
+	Vector GetRow(int row_num) {
+		/* This function returns a vector created from a row */
+		Vector out(data[row_num]);
+		return out;
+	}
 
 	// Other Basic Linear Algebra Functions
 	Matrix T() {
@@ -325,7 +454,7 @@ public:
 			for (int i = 0; i < m; i++) {
 				col_sums += data[i][j];
 			}
-			if (col_sums <= 1e-16) {
+			if (std::abs(col_sums) <= 1e-16) {
 				return 0;
 			}
 		}
@@ -338,9 +467,9 @@ public:
 		for (int current_row = 0; current_row < m; current_row++) {
 			double front = temp[current_row][current_row];
 			// if the leading term is zero, we will need to do a row swap
-			if (front <= 1e-16) {
+			if (std::abs(front) <= 1e-16) {
 				int i = current_row;
-				while ((i < m) && (temp[i][current_row] <= 1e-16)) {
+				while ((i < m) && (std::abs(temp[i][current_row]) <= 1e-16)) {
 					i++;
 				}
 				if (i != current_row) {
@@ -388,12 +517,12 @@ public:
 		for (int current_row = 0; current_row < num_iter; current_row++) {
 			double front = out[current_row][current_row];
 			// if the leading term is zero, we will need to do a row swap
-			if (front <= 1e-16) {
+			if (std::abs(front) <= 1e-16) {
 				int i = current_row;
-				while ((i < m) && (out[i][current_row] <= 1e-16)) {
+				while ((i < m) && (std::abs(out[i][current_row]) <= 1e-16)) {
 					i++;
 				}
-				if ((i != current_row) && (out[current_row][i] > 1e-16)) {
+				if ((i != current_row) && (std::abs(out[current_row][i]) > 1e-16)) {
 					// update our data format so that we have swapped these rows
 					out.RowSwap(current_row, i);
 				}
@@ -402,7 +531,7 @@ public:
 			front = out[current_row][current_row];
 			// make sure that we did find a non zero entry for this row, if
 			// not then we can skip this algebra bit
-			if (front > 1e-16) {
+			if (std::abs(front) > 1e-16) {
 				// use row multiplication to reduce this initial value to one
 				out.RowMul(current_row, (1 / front));
 				// now we want to use row addition of the current row
@@ -419,7 +548,7 @@ public:
 		for (int current_row = num_iter; current_row > 0; current_row--) {
 			double front = out[current_row][current_row];
 			// if this value is nonzero
-			if (front > 1e-16) {
+			if (std::abs(front) > 1e-16) {
 				for (int i = 0; i < current_row; i++) {
 					out.RowAdd(current_row, i, -1 * out[i][current_row]);
 				}
@@ -427,7 +556,7 @@ public:
 		}
 		return out;
 	}
-	std::vector<double> Solve(std::vector<double> x) {
+	Vector Solve(Vector x) {
 		/* Solve the matrix for solutions x */
 		// Make sure that there is probably enough rows to solve the problem
 		if (m < n) { throw UnderDetermined(); }
@@ -445,7 +574,7 @@ public:
 		for (int i = 0; i < n; i++) {
 			if (std::abs(solve[i][i]) <= 1e-16) { throw UnderDetermined(); }
 		}
-		std::vector<double> solutions(m, 0);
+		Vector solutions(m, 0);
 		for (int i = 0; i < n; i++) {
 			solutions[i] = solve[m][i];
 		}
@@ -457,10 +586,77 @@ public:
 		find an orthogonal basis. There are a couple of functions needed
 		to compute this, specifically the inner product of two vectors
 		and the projection of two vectors. */
+		// the sequence of u's
+		std::vector<Vector> U(n, Vector(m, 0));
+		// set the first u to itself
+		Vector v = (*this).GetCol(0);
+		U[0] = v * (1 / v.mag());
+		for (int k = 1; k < n; k++) {
+			// get the next column vector
+			Vector v = (*this).GetCol(k);
+			Vector u = v;
+			for (int i = (k - 1); k >= 0; k--) {
+				u = u - U[i].proj(v);
+			}
+			U[k] = u * (1 / u.mag());
+		}
 
-
+		return Matrix(U);
+	}
+	std::pair<Matrix, Matrix> QRDecomp() {
+		/* This function takes this matrix and performs QR decomposition. 
+		Q is the orthonormal basis, which can be found by the Gram-Schmidt process
+		This is orthogonal, so its inverse is also the transpose.
+		A = QR -> Q^T * A = R
+		R is then also an upper-triangular matrix. */
+		Matrix Q = (*this).GramSchmidt();
+		Matrix R = Q.T() * (*this);
+		return std::make_pair(Q, R);
+	}
+	bool isTrig() {
+		/* Bool of a matrix to test if the matrix is upper-triangular */
+		bool out = true;
+		#pragma omp parallel for
+		for (int i = 0; i < m; i++) {
+			for (int j = 0; j < n; j++) {
+				// if below our main diagonal, check if entries are 0
+				if (i < j) {
+					if (std::abs(data[i][j]) > 1e-16) {
+						out = false;
+					}
+				}
+			}
+		}
+		return out;
+	}
+	std::vector<double> Eigenvalues() {
+		/* This uses the QR-algorithm to calculate the eigenvalues of the matrix
+		This is done my repeatedly finding A_k = Q_k * R_k  and then 
+		A_{k+1} = R_{k} * Q_{k} until A_{k+1} is upper-triangular. Then 
+		the eigenvalues are those found on the diagonal. There is a proof of this. 
+		Note: This process can be speed up with Householder reductions first to put the 
+		matrix in Hessenberg form since it is closer to convergence. NOT done here */
+		std::pair<Matrix, Matrix> QR_pair = (*this).QRDecomp();
+		Matrix temp = QR_pair.second * QR_pair.first;
+		while (!temp.isTrig()) {
+			QR_pair = temp.QRDecomp();
+			temp = QR_pair.second * QR_pair.first;
+		}
+		std::vector<double> out(n, 0);
+		for (int i = 0; i < n; i++) {
+			out[i] = temp[i][i];
+		}
+		return out;
+	}
+	Vector Eigenvector(double eigenvalue) {
+		/* This takes a eigenvalue, and solves for the eigenvectors 
+		Want (A - eigenvalue * I) * x = 0 */
+		Matrix temp = (*this) - (Eye(n) * eigenvalue);
+		Vector solution = temp.Solve(Vector(n, 0));
+		return solution;
 	}
 };
+
 
 // Functions for the creation of matrices
 Matrix Diag(std::vector<double> diag_entries) {
@@ -486,66 +682,6 @@ Matrix Eye(int n) {
 	std::vector<double> diag_entries(n, 1);
 	return Diag(diag_entries);
 }
-
-
-// Helper Functions for Vectors
-double InnerProduct(std::vector<double> u, std::vector<double> v) {
-	/* This computes the inner product of two vectors (also known as
-	the dot product) */
-	if (u.size() != v.size()) { throw UnequalDim(); }
-	int len = u.size();
-	double out;
-	for (int i = 0; i < len; i++) {
-		out += u[i] * v[i];
-	}
-	return out;
-}
-
-std::vector<double> proj(std::vector<double> u, std::vector<double> v) {
-	/* This function finds the projection of v onto u 
-	proj_u (v) = \frac{<u, v>}{<u, u>}u
-	*/
-	if (u.size() != v.size()) { throw UnequalDim(); }
-	double num = InnerProduct(u, v);
-	double denom = InnerProduct(u, u);
-	if (std::abs(denom) <= 1e-16) { return std::vector<double> (v.size(), 0); }
-	return u * (num / denom);
-}
-
-std::vector<double> operator+(std::vector<double> u, std::vector<double> v) {
-	/* This function is vector addition performed element-wise */
-	// Verify both vectors are the same length
-	if (u.size() != v.size()) { throw UnequalDim(); }
-	std::vector<double> out(u.size(), 0);
-	#pragma omp parallel for 
-	for (int i = 0; i < u.size(); i++) {
-		out[i] = u[i] + v[i];
-	}
-	return out;
-}
-
-std::vector<double> operator-(std::vector<double> u, std::vector<double> v) {
-	/* This function is vector subtraction performed element-wise */
-	// Verify both vectors are the same length
-	if (u.size() != v.size()) { throw UnequalDim(); }
-	std::vector<double> out(u.size(), 0);
-	#pragma omp parallel for 
-	for (int i = 0; i < u.size(); i++) {
-		out[i] = u[i] - v[i];
-	}
-	return out;
-}
-
-std::vector<double> operator*(std::vector<double> u, double c) {
-	/* This function is vector scalar multiplication performed element-wise */
-	std::vector<double> out = u;
-	#pragma omp parallel for 
-	for (int i = 0; i < u.size(); i++) {
-		out[i] *= c;
-	}
-	return out;
-}
-
 
 
 // Linear Algebra Functions using Matrices
