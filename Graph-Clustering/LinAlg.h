@@ -229,19 +229,19 @@ public:
 		
 
 	// data access operator overloading
-	std::vector<double>& operator[](int i) {
+	std::vector<double>& operator[](const int i) {
 		/* This overloads the access operator to only use one bracket instead of two, and it
 		automatically references the data vectors */
 		return data[i];
 	}
-	double& at(int i, int j) {
+	double& at(const int i, const int j) {
 		/* Returns tha data at location i, j */
 		return data[i][j];
 	}
 
 
 	// arithmetic operator overloading
-	Matrix operator+(Matrix &rhs) {
+	Matrix operator+(const Matrix &rhs) {
 		/* This function takes in another matrix, sums this and the rhs element-wise, and returns a new matrix*/
 		// verify both matrices are same dimenison
 		if ((n != rhs.n) || (m != rhs.m)) {
@@ -252,13 +252,13 @@ public:
 		#pragma omp parallel for
 		for (int i = 0; i < m; i++) {
 			for (int j = 0; j < n; j++) {
-				out[i][j] = data[i][j] + rhs[i][j];
+				out[i][j] = data[i][j] + rhs.data[i][j];
 			}
 		}
 
 		return out;
 	}
-	Matrix operator-(Matrix &rhs) {
+	Matrix operator-(const Matrix &rhs) {
 		/* Returns new matrix as the result of element-wise subtraction */
 		if ((n != rhs.n) || (m != rhs.m)) {
 			throw UnequalDim();
@@ -268,13 +268,13 @@ public:
 		#pragma omp parallel for
 		for (int i = 0; i < m; i++) {
 			for (int j = 0; j < n; j++) {
-				out[i][j] = data[i][j] - rhs[i][j];
+				out[i][j] = data[i][j] - rhs.data[i][j];
 			}
 		}
 
 		return out;
 	}
-	Matrix operator*(Matrix &rhs) {
+	Matrix operator*(const Matrix &rhs) {
 		/* Returns new matrix based on matrix multiplication 
 		This means that for A * B = C, the element c at position i,j is the dot-product of column i and row j */
 		// verify that the matrices are the right size
@@ -290,14 +290,14 @@ public:
 		for (int i = 0; i < m; i++) {
 			for (int j = 0; j < rhs.n; j++) {
 				for (int a = 0; a < n; a++) {
-					out[i][j] += data[i][a] * rhs[a][j];
+					out[i][j] += data[i][a] * rhs.data[a][j];
 				}
 			}
 		}
 
 		return out;
 	}
-	Matrix operator+(double &rhs) {
+	Matrix operator+(const double &rhs) {
 		/* This function takes in another matrix, sums this and the rhs element-wise, and returns a new matrix*/
 		// create output matrix, initailized to zeros
 		Matrix out(m, n);
@@ -310,7 +310,7 @@ public:
 
 		return out;
 	}
-	Matrix operator-(double rhs) {
+	Matrix operator-(const double rhs) {
 		/* Returns new matrix as the result of element-wise subtraction */
 		// create output matrix, initailized to zeros
 		Matrix out(m, n);
@@ -323,7 +323,7 @@ public:
 
 		return out;
 	}
-	Matrix operator*(double rhs) {
+	Matrix operator*(const double rhs) {
 		/* Returns new matrix based on scalar multiplication */
 		// create output matrix, initailized to zeros
 		Matrix out(m, n);
@@ -336,7 +336,7 @@ public:
 
 		return out;
 	}
-	bool operator==(Matrix &rhs) {
+	bool operator==(const Matrix &rhs) {
 		/* Test for equality */
 		if (n != rhs.n) {
 			return false;
@@ -349,7 +349,7 @@ public:
 		}
 		return true;
 	}
-	bool operator!=(Matrix &rhs) {
+	bool operator!=(const Matrix &rhs) {
 		/* Test for inequality */
 		return !(*this == rhs);
 	}
@@ -511,7 +511,7 @@ public:
 		int num_cols = n - aug;
 		int num_iter = std::min(num_rows, num_cols);
 		// copy our matrix to get the output matrix that we will manipulate
-		Matrix out = *this;
+		Matrix out(data);
 		/* We will increment the rows as we convert the bottom triangle into
 		zeros to keep track of level. */
 		for (int current_row = 0; current_row < num_iter; current_row++) {
