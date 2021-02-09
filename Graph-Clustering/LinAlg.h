@@ -120,9 +120,43 @@ public:
 		}
 		return out;
 	}
-	Vector operator=(Vector rhs) {
+	void operator=(Vector rhs) {
 		/* This function is vector scalar multiplication performed element-wise */
-		Vector out(rhs.data);
+		data =rhs.data;
+	}
+	bool operator==(Vector& rhs) {
+		/* This function evaluates the equality of two vectors */
+		int s = data.size();
+		if (s != rhs.data.size()) {
+			return false;
+		}
+		for (int i = 0; i < s; i++) {
+			if (std::abs(data[i] - rhs.data[i]) > 1e-6) {
+				return false;
+			}
+		}
+		return true;
+	}
+	friend bool operator==(const Vector& lhs, const Vector& rhs) {
+		/* This function evaluates the equality of two vectors */
+		int s = lhs.data.size();
+		if (s != rhs.data.size()) {
+			return false;
+		}
+		for (int i = 0; i < s; i++) {
+			if (std::abs(lhs.data[i] - rhs.data[i]) > 1e-6) {
+				return false;
+			}
+		}
+		return true;
+	}
+	friend std::ostream& operator<<(std::ostream& out, Vector& rhs) {
+		/* Print out the vector */
+		out << "[ ";
+		for (int i = 0; i < rhs.data.size(); i++) {
+			out << std::to_string(rhs.data[i]) << " ";
+		}
+		out << "]" << std::endl;
 		return out;
 	}
 	double mag() {
@@ -152,11 +186,13 @@ public:
 	Vector proj(Vector rhs) {
 		/* This function finds the projection of v onto u
 		proj_u (v) = \frac{<u, v>}{<u, u>}u
+		u = this
+		v = rhs
 		*/
 		if (data.size() != rhs.data.size()) { throw UnequalDim(); }
 		double num = (*this).InnerProduct(rhs);
 		double denom = (*this).InnerProduct((*this));
-		if (std::abs(denom) <= 1e-16) { return std::vector<double>(rhs.data.size(), 0); }
+		if (std::abs(denom) <= 1e-6) { return std::vector<double>(rhs.data.size(), 0); }
 		return (*this) * (num / denom);
 	}
 };
@@ -345,8 +381,29 @@ public:
 		if (m != rhs.m) {
 			return false;
 		}
-		if (data != rhs.data) {
+		for (int i = 0; i < m; i++) {
+			for (int j = 0; j < n; j++) {
+				if (std::abs(data[i][j] - data[i][j]) > 1e-6) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	friend bool operator==(const Matrix& lhs, const Matrix& rhs) {
+		/* Test for equality */
+		if (lhs.n != rhs.n) {
 			return false;
+		}
+		if (lhs.m != rhs.m) {
+			return false;
+		}
+		for (int i = 0; i < lhs.m; i++) {
+			for (int j = 0; j < lhs.n; j++) {
+				if (std::abs(lhs.data[i][j] - rhs.data[i][j]) > 1e-6) {
+					return false;
+				}
+			}
 		}
 		return true;
 	}
@@ -397,12 +454,19 @@ public:
 		/* This function takes two matrices and returns one concat. */
 		// Verify they have the same number of rows
 		if (m != rhs.m) { throw UnevenCols(); }
+		int new_m = m;
 		int new_n = n + rhs.n;
-		Matrix out = *this;
-		#pragma omp parallel for
+		Matrix out(new_m, new_n);
+#pragma omp parallel for
 		for (int i = 0; i < m; i++) {
-			for (int j = n; j < new_n; j++) {
-				out[i][j] = rhs[i][j - n];
+			for (int j = 0; j < n; j++) {
+				out[i][j] = data[i][j];
+			}
+		}
+#pragma omp parallel for
+		for (int i = 0; i < rhs.m; i++) {
+			for (int j = 0; j < rhs.n; j++) {
+				out[i][n + j] = rhs.data[i][j];
 			}
 		}
 		return out;
@@ -510,7 +574,7 @@ public:
 
 		return det;
 	}
-	Matrix RREF(int aug = 0) {
+	Matrix RREF() {
 		/* This function is meant to find the reduced row echolon form of 
 		a matrix and return the new matrix. This is similar to the determinant
 		function, but they cannot be combined because of restrictions on 
@@ -519,21 +583,21 @@ public:
 		// get number of columns to consider in matrix (if the matrix is augmented or not)
 		// this defaults to 0 columns in the augmented section
 		int num_rows = m;
-		int num_cols = n - aug;
+		int num_cols = n;
 		int num_iter = std::min(num_rows, num_cols);
 		// copy our matrix to get the output matrix that we will manipulate
-		Matrix out(data);
+		Matrix out = (*this);
 		/* We will increment the rows as we convert the bottom triangle into
 		zeros to keep track of level. */
 		for (int current_row = 0; current_row < num_iter; current_row++) {
 			double front = out[current_row][current_row];
 			// if the leading term is zero, we will need to do a row swap
-			if (std::abs(front) <= 1e-16) {
+			if (std::abs(front) <= 1e-6) {
 				int i = current_row;
-				while ((i < m) && (std::abs(out[i][current_row]) <= 1e-16)) {
+				while ((i < (m - 1)) && (std::abs(out[i][current_row]) <= 1e-6)) {
 					i++;
 				}
-				if ((i != current_row) && (std::abs(out[current_row][i]) > 1e-16)) {
+				if ((i != current_row) && (std::abs(out[i][current_row]) > 1e-6)) {
 					// update our data format so that we have swapped these rows
 					out.RowSwap(current_row, i);
 				}
@@ -542,29 +606,60 @@ public:
 			front = out[current_row][current_row];
 			// make sure that we did find a non zero entry for this row, if
 			// not then we can skip this algebra bit
-			if (std::abs(front) > 1e-16) {
+			if (std::abs(front) > 1e-6) {
 				// use row multiplication to reduce this initial value to one
-				out.RowMul(current_row, (1 / front));
+				out.RowMul(current_row, (1.0 / front));
 				// now we want to use row addition of the current row
 				// to make the columns below set to zero
 				double other;
 				for (int i = current_row + 1; i < m; i++) {
 					other = out[i][current_row];
-					out.RowAdd(current_row, i, -1 * other);
+					out.RowAdd(current_row, i, -1.0 * other);
 				}
 			}
 		}
+		// need to pick up the rest of the columns
+		if (std::abs(out[num_iter - 1][num_iter - 1] - 1) > 1e-6) {
+			// this will only occur if cols > rows
+			int j = num_iter - 1;
+			bool escape = false;
+			while ((j < n) && (!escape)) {
+				int front = out[num_iter - 1][j];
+				if (std::abs(front) > 1e-6) { 
+					out.RowMul(num_iter - 1, (1.0 / front));
+					escape = true;
+				}
+				else {
+					j++;
+				}
+			}
+			
+		}
 		// we now have an upper-triangular matrix and need to 
 		// remove values above the diagonal
-		for (int current_row = num_iter; current_row > 0; current_row--) {
+		// pick up the extra columns that are past the min(num rows, num cols)
+		int i = m - 1;
+		int j = n - 1;
+		while ((j >= num_iter)) {
+			if (std::abs(out[i][j]) > 1e-6) {
+				for (int r = 0; r < i; r++) {
+					out.RowAdd(i, r, -1 * out[r][j]);
+				}
+				j--;
+			}
+		}
+		// after we are back to the square part, our algorithm should have 1's
+		// along the diagonal
+		for (int current_row = (num_iter - 1); current_row >= 0; current_row--) {
 			double front = out[current_row][current_row];
 			// if this value is nonzero
-			if (std::abs(front) > 1e-16) {
+			if (std::abs(front) > 1e-6) {
 				for (int i = 0; i < current_row; i++) {
 					out.RowAdd(current_row, i, -1 * out[i][current_row]);
 				}
 			}
 		}
+
 		return out;
 	}
 	Vector Solve(Vector x) {
@@ -578,16 +673,16 @@ public:
 		for (int i = 0; i < m; i++) {
 			temp_vector[i][0] = x[i];
 		}
-		Matrix comp = Augment(temp_vector);
-		Matrix solve = comp.RREF(1);
+		Matrix comp = (*this).Augment(temp_vector);
+		Matrix solve = comp.RREF();
 		// Verify that we have a solution, meaning the diagonal
-		// entries are all zeros
+		// entries are all nonzero
 		for (int i = 0; i < n; i++) {
 			if (std::abs(solve[i][i]) <= 1e-16) { throw UnderDetermined(); }
 		}
 		Vector solutions(m, 0);
-		for (int i = 0; i < n; i++) {
-			solutions[i] = solve[m][i];
+		for (int i = 0; i < m; i++) {
+			solutions[i] = solve[i][n];
 		}
 
 		return solutions;
@@ -598,21 +693,24 @@ public:
 		to compute this, specifically the inner product of two vectors
 		and the projection of two vectors. */
 		// the sequence of u's
-		std::vector<Vector> U(n, Vector(m, 0));
+		std::vector<Vector> U, E;
 		// set the first u to itself
 		Vector v = (*this).GetCol(0);
-		U[0] = v * (1 / v.mag());
+		Vector u = v;
+		U.push_back(u);
+		E.push_back(u * (1.0 / u.mag()));
 		for (int k = 1; k < n; k++) {
 			// get the next column vector
 			Vector v = (*this).GetCol(k);
 			Vector u = v;
-			for (int i = (k - 1); k >= 0; k--) {
+			for (int i = (k - 1); i >= 0; i--) {
 				u = u - U[i].proj(v);
 			}
-			U[k] = u * (1 / u.mag());
+			U.push_back(u);
+			E.push_back(u * (1.0 / u.mag()));
 		}
 
-		return Matrix(U);
+		return Matrix(E);
 	}
 	std::pair<Matrix, Matrix> QRDecomp() {
 		/* This function takes this matrix and performs QR decomposition. 
@@ -627,12 +725,11 @@ public:
 	bool isTrig() {
 		/* Bool of a matrix to test if the matrix is upper-triangular */
 		bool out = true;
-		#pragma omp parallel for
 		for (int i = 0; i < m; i++) {
 			for (int j = 0; j < n; j++) {
 				// if below our main diagonal, check if entries are 0
 				if (i < j) {
-					if (std::abs(data[i][j]) > 1e-16) {
+					if (std::abs(data[i][j]) > 1e-6) {
 						out = false;
 					}
 				}
