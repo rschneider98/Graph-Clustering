@@ -773,7 +773,7 @@ public:
 		\lambda^2 - (a_{11} + a_{22}) \lambda + a_[11} * a_{22} -a_{12} * a_{21} = 0 */
 		Matrix out(2, 2);
 		double a = 1;
-		double b = data[0][0] + data[1][1];
+		double b = -1 * (data[0][0] + data[1][1]);
 		double c = (data[0][0] * data[1][1]) - (data[0][1] * data[1][0]);
 		double root = std::pow(b, 2) - (4 * a * c);
 		if (root < 0) {
@@ -839,9 +839,7 @@ public:
 		Usage of "shifts" helps increase the speed of convergence
 		H_n - cI = QR
 		 H_{n+1} = RQ + cI 
-		The last diagnoal entry is used here for the shift value 
-		
-		*/
+		The last diagnoal entry is used here for the shift value */
 		// two by two matrix we calculate using characteristic 
 		// polynomial and quadratic equation then return real parts
 		if (m == n == 2) { 
@@ -855,14 +853,8 @@ public:
 		std::pair<Matrix, Matrix> QR_pair = (*this).QRDecomp();
 		Matrix temp1 = QR_pair.second * QR_pair.first;
 		Matrix temp2(m, n);
-		Vector prev_diag(m, 0);
-		Vector diag(m, 0);
-		for (int i = 0; i < m; i++) {
-			diag[i] = temp1[i][i];
-		}
-		while ((!temp1.isTrig()) && (prev_diag != diag)) {
-			// move the new iteration of diagonal checks
-			prev_diag = diag;
+		bool escape = false;
+		while ((!temp1.isTrig()) && (!escape)) {
 			// shift the matrix
 			double factor = temp1[m - 1][m - 1];
 			temp2 = temp1 - (Eye(m) * factor);
@@ -875,12 +867,9 @@ public:
 			// if in complex form, use 2x2 eigenvalue calculations
 			if (temp1.isComplexTrig()) {
 				temp1 = temp1.getFinalEigenvalues();
+				escape = true;
 			}
 			std::cout << temp1 << std::endl;
-			// get entries along diagonal 
-			for (int i = 0; i < m; i++) {
-				diag[i] = temp1[i][i];
-			}
 		}
 		// currently we return only the real parts of the eigenvalues
 		std::vector<double> out(n, 0);

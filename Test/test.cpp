@@ -413,7 +413,7 @@ TEST(MatrixOps, EigenValues2) {
 	EXPECT_EQ(res, exp_res);
 }
 
-TEST(MatrixOps, EigenValues2) {
+TEST(MatrixOps, EigenValues3) {
 	std::vector<std::vector<double>> myVect1{
 		{0.83462, 0.699265, 0.930962, 0.863479},
 		{0.473505, 0.691988, 0.747999, 0.225765},
@@ -421,7 +421,24 @@ TEST(MatrixOps, EigenValues2) {
 		{0.496422, 0.556214, 0.727784, 0.789878}
 	};
 	std::vector<double> myVect2{
+		2.375131, -0.107888, -0.107888, 0.005895
+	};
+	Vector res(Matrix(myVect1).Eigenvalues());
+	Vector exp_res(myVect2);
+	EXPECT_EQ(res, exp_res);
+}
 
+TEST(MatrixOps, EigenValues4) {
+	std::vector<std::vector<double>> myVect1{
+		{0.99267, 0.519408, 0.543308, 0.592436, 0.140309, 0.464678},
+		{0.13258, 0.927667, 0.205553, 0.883686, 0.557494, 0.140629},
+		{0.11488, 0.259932, 0.523339, 0.451498, 0.415519, 0.602938},
+		{0.241713, 0.582723, 0.267322, 0.216131, 0.561923, 0.901802},
+		{0.376637, 0.877729, 0.183621, 0.177625, 0.208695, 0.956775},
+		{0.0170518, 0.951146, 0.238967, 0.224569, 0.619109, 0.489213}
+	};
+	std::vector<double> myVect2{
+		2.749296, 0.641383, 0.490671, -0.094343, -0.094343, -0.335974
 	};
 	Vector res(Matrix(myVect1).Eigenvalues());
 	Vector exp_res(myVect2);
