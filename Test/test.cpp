@@ -264,6 +264,21 @@ TEST(MatrixOps, RREFNonSquare2) {
 	EXPECT_EQ(Matrix(myVect1).RREF(), Matrix(myVect2));
 }
 
+TEST(MatrixOps, RREFNonSquare3) {
+	std::vector<std::vector<double>> myVect1{
+		{1, 2, 3, 5},
+		{3, 5, 7, 11},
+		{5, 7, 11, 13}
+	};
+
+	std::vector<std::vector<double>> myVect2{
+		{1, 0, 0, -3},
+		{0, 1, 0, 4},
+		{0, 0, 1, 0}
+	};
+
+	EXPECT_EQ(Matrix(myVect1).RREF(), Matrix(myVect2));
+}
 TEST(MatrixOps, RREFLargerNonSquare) {
 	std::vector<std::vector<double>> myVect1{
 		{1, -5, 8, 3}, 
@@ -358,7 +373,10 @@ TEST(MatrixOps, isTrigRREF1) {
 		{3, 5, 7, 11},
 		{5, 7, 11, 13}
 	};
-	EXPECT_EQ(Matrix(myVect1).RREF().isTrig(), true);
+	Matrix test1(myVect1);
+	Matrix test2 = test1.RREF();
+	bool t = test2.isTrig();
+	EXPECT_EQ(t, true);
 }
 
 TEST(MatrixOps, isTrigRREF2) {
@@ -369,5 +387,43 @@ TEST(MatrixOps, isTrigRREF2) {
 		{0.770157, 0.894326, 0.743106, 0.207068, 0.505726},
 		{0.623625, 0.580306, 0.865516, 0.939035, 0.916691}
 	};
-	EXPECT_EQ(Matrix(myVect1).RREF().isTrig(), true);
+	Matrix m = Matrix(myVect1).RREF();
+	EXPECT_EQ(m.isTrig(), true);
+}
+
+TEST(MatrixOps, EigenValues1) {
+	std::vector<std::vector<double>> myVect1{
+		{3, 2},
+		{1, 2}
+	};
+	std::vector<double> myVect2{ 4, 1 };
+	Vector res(Matrix(myVect1).Eigenvalues());
+	Vector exp_res(myVect2);
+	EXPECT_EQ(res, exp_res);
+}
+
+TEST(MatrixOps, EigenValues2) {
+	std::vector<std::vector<double>> myVect1{
+		{0, -1},
+		{1, 0}
+	};
+	std::vector<double> myVect2{ 4, 1 };
+	Vector res(Matrix(myVect1).Eigenvalues());
+	Vector exp_res(myVect2);
+	EXPECT_EQ(res, exp_res);
+}
+
+TEST(MatrixOps, EigenValues2) {
+	std::vector<std::vector<double>> myVect1{
+		{0.83462, 0.699265, 0.930962, 0.863479},
+		{0.473505, 0.691988, 0.747999, 0.225765},
+		{0.933097, 0.105651, 0.280316, 0.0671968},
+		{0.496422, 0.556214, 0.727784, 0.789878}
+	};
+	std::vector<double> myVect2{
+
+	};
+	Vector res(Matrix(myVect1).Eigenvalues());
+	Vector exp_res(myVect2);
+	EXPECT_EQ(res, exp_res);
 }

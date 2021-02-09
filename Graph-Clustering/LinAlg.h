@@ -150,6 +150,10 @@ public:
 		}
 		return true;
 	}
+	friend bool operator!=(const Vector& lhs, const Vector& rhs) {
+		/* This function evaluates the inequality of two vectors */
+		return !(lhs == rhs);
+	}
 	friend std::ostream& operator<<(std::ostream& out, Vector& rhs) {
 		/* Print out the vector */
 		out << "[ ";
@@ -645,8 +649,8 @@ public:
 				for (int r = 0; r < i; r++) {
 					out.RowAdd(i, r, -1 * out[r][j]);
 				}
-				j--;
 			}
+			j--;
 		}
 		// after we are back to the square part, our algorithm should have 1's
 		// along the diagonal
@@ -728,7 +732,7 @@ public:
 		for (int i = 0; i < m; i++) {
 			for (int j = 0; j < n; j++) {
 				// if below our main diagonal, check if entries are 0
-				if (i < j) {
+				if (i > j) {
 					if (std::abs(data[i][j]) > 1e-6) {
 						out = false;
 					}
@@ -737,22 +741,151 @@ public:
 		}
 		return out;
 	}
+	bool isComplexTrig() {
+		/* Bool of a SQUARE matrix to test if the matrix is upper-triangular with only
+		imaginary conjugates of eigenvalues below the diagonal. These can
+		only occur every other step */
+		// check one step below main diagonal
+		for (int i = 0; i < m; i++) {
+			for (int j = 0; j < n; j++) {
+				// if below our main diagonal by one row, check if entries are 0
+				if ((i - 1) > j) {
+					if (std::abs(data[i][j]) > 1e-6) {
+						return false;
+					}
+				}
+			}
+		}
+		// check row below main diagonal
+		double prev = data[1][0];
+		double next;
+		for (int i = 1; i < (m - 1); i++) {
+			next = data[i + 1][i];
+			if ((std::abs(prev) > 1e-6) && (std::abs(next) > 1e-6)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	Matrix EigenvaluesTwoByTwo() {
+		/* Find eigenvalues of a 2x2 matrix and return matrix in complex form
+		This equation is 
+		\lambda^2 - (a_{11} + a_{22}) \lambda + a_[11} * a_{22} -a_{12} * a_{21} = 0 */
+		Matrix out(2, 2);
+		double a = 1;
+		double b = data[0][0] + data[1][1];
+		double c = (data[0][0] * data[1][1]) - (data[0][1] * data[1][0]);
+		double root = std::pow(b, 2) - (4 * a * c);
+		if (root < 0) {
+			double real = (-1 * b) / (2 * a);
+			double img = std::sqrt(-1 * root) / ( 2 * a);
+			out[0][0] = real;
+			out[1][1] = real;
+			out[0][1] = img;
+			out[1][0] = -1 * img;
+		}
+		else {
+			out[0][0] = (-1 * b + std::sqrt(root)) / (2 * a);
+			out[1][1] = (-1 * b - std::sqrt(root)) / (2 * a);
+		}
+		return out;
+	}
+	Matrix getFinalEigenvalues() {
+		/* This functions takes the current matrix in complex upper 
+		triangular form, looks for complex eigenvalues along
+		the main diagonal and returns a matrix with
+		calculated complex eigenvalues */
+		Matrix out = (*this);
+		// along the diagonal below the main diag
+		for (int i = 0; i < (m - 1); i++) {
+			// if nonzero, this is the imaginary component of 
+			// the eigenvector above
+			if (std::abs(data[i + 1][i]) > 1e-6) {
+				// create temp matrix of these complex components
+				Matrix temp(2, 2);
+				temp[0][0] = data[i][i];
+				temp[0][1] = data[i][i + 1];
+				temp[1][0] = data[i + 1][i];
+				temp[1][1] = data[i + 1][i + 1];
+				Matrix solution = temp.EigenvaluesTwoByTwo();
+				out[i][i] = solution[0][0];
+				out[i][i + 1] = solution[0][1];
+				out[i + 1][i] = solution[1][0];
+				out[i + 1][i + 1] = solution[1][1];
+			}
+		}
+		return out;
+	}
 	std::vector<double> Eigenvalues() {
-		/* This uses the QR-algorithm to calculate the eigenvalues of the matrix
+		/* This uses the QR-algorithm to calculate the REAL eigenvalues of the matrix
+		
 		This is done my repeatedly finding A_k = Q_k * R_k  and then 
 		A_{k+1} = R_{k} * Q_{k} until A_{k+1} is upper-triangular. Then 
 		the eigenvalues are those found on the diagonal. There is a proof of this. 
-		Note: This process can be speed up with Householder reductions first to put the 
-		matrix in Hessenberg form since it is closer to convergence. NOT done here */
-		std::pair<Matrix, Matrix> QR_pair = (*this).QRDecomp();
-		Matrix temp = QR_pair.second * QR_pair.first;
-		while (!temp.isTrig()) {
-			QR_pair = temp.QRDecomp();
-			temp = QR_pair.second * QR_pair.first;
+
+		Notes: See http://www.mosismath.com/Eigenvalues/EigenvalsQR.html for more
+		details on implementaion and usage of the QR algorithm
+
+		This process can be speed up with Householder reductions first to put the 
+		matrix in Hessenberg form since it is closer to convergence. NOT done here
+
+		For complex results, they are stored in 2 x 2 matrices along the diagonal
+		[Re_1, Im_2]
+		[Im_1, Re_2]
+		This means that Im_1 is below the diagonal and our exit condition for real numbers
+		is insufficient. Thus, we will store the entries of the diagonal, and if they 
+		are equivalent, then we assume that we have reached our exit condition.
+		
+		Usage of "shifts" helps increase the speed of convergence
+		H_n - cI = QR
+		 H_{n+1} = RQ + cI 
+		The last diagnoal entry is used here for the shift value 
+		
+		*/
+		// two by two matrix we calculate using characteristic 
+		// polynomial and quadratic equation then return real parts
+		if (m == n == 2) { 
+			Matrix values = (*this).EigenvaluesTwoByTwo();
+			std::vector<double> out(2, 0);
+			out[0] = values[0][0];;
+			out[1] = values[1][1];
+			return out;
 		}
+
+		std::pair<Matrix, Matrix> QR_pair = (*this).QRDecomp();
+		Matrix temp1 = QR_pair.second * QR_pair.first;
+		Matrix temp2(m, n);
+		Vector prev_diag(m, 0);
+		Vector diag(m, 0);
+		for (int i = 0; i < m; i++) {
+			diag[i] = temp1[i][i];
+		}
+		while ((!temp1.isTrig()) && (prev_diag != diag)) {
+			// move the new iteration of diagonal checks
+			prev_diag = diag;
+			// shift the matrix
+			double factor = temp1[m - 1][m - 1];
+			temp2 = temp1 - (Eye(m) * factor);
+			// get QR decomposition of our matrix
+			QR_pair = temp2.QRDecomp();
+			// find similar matrix closer to upper triangular
+			temp2 = QR_pair.second * QR_pair.first;
+			// unshift matrix
+			temp1 = temp2 + (Eye(m) * factor);
+			// if in complex form, use 2x2 eigenvalue calculations
+			if (temp1.isComplexTrig()) {
+				temp1 = temp1.getFinalEigenvalues();
+			}
+			std::cout << temp1 << std::endl;
+			// get entries along diagonal 
+			for (int i = 0; i < m; i++) {
+				diag[i] = temp1[i][i];
+			}
+		}
+		// currently we return only the real parts of the eigenvalues
 		std::vector<double> out(n, 0);
 		for (int i = 0; i < n; i++) {
-			out[i] = temp[i][i];
+			out[i] = temp1[i][i];
 		}
 		return out;
 	}
