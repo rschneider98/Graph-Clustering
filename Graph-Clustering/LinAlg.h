@@ -879,11 +879,21 @@ public:
 		return out;
 	}
 	Vector Eigenvector(double eigenvalue) {
-		/* This takes a eigenvalue, and solves for the eigenvectors 
-		Want (A - eigenvalue * I) * x = 0 */
+		/* This takes a eigenvalue, and solves for a corresponding real eigenvector
+		Want (A - eigenvalue * I) * x = 0 
+		The first pass of RREF returns the ratios between the elements
+		of the eigenvectors, then the last element is set to 1 and the
+		second pass of RREF solves for the eigenvector 
+		Note: An eigenvalue can have multiple eigenvectors, we
+		calculate just one possible */
 		Matrix temp = (*this) - (Eye(n) * eigenvalue);
-		Vector solution = temp.Solve(Vector(n, 0));
-		return solution;
+		Matrix equ(n, 1);
+		Matrix ratios = temp.Augment(equ).RREF();
+		ratios[m - 1][n - 1] = 1;
+		ratios[m - 1][n] = 1;
+		Matrix solved = ratios.RREF();
+		Vector solve = solved.GetCol(n);
+		return solve;
 	}
 };
 
