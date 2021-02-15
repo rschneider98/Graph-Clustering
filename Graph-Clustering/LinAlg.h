@@ -816,8 +816,69 @@ public:
 		}
 		return out;
 	}
-	std::vector<double> Eigenvalues() {
-		/* This uses the QR-algorithm to calculate the REAL eigenvalues of the matrix
+	std::pair<Matrix, double> vhouse() {
+		/* Construction of a Householder vector 
+		
+		https://math.la.asu.edu/~gardner/QR.pdf
+		H = I - 2uuT/||u||^2
+		Want a v and beta such that Hv = [||r|| 0 0 0 ...]
+		So v = x - r and beta = 2/||v||^2*/
+		Matrix v = (*this);
+		v[0][0] -= (*this).GetCol(0).mag();
+		double beta = 2 / std::pow(v.GetCol(0).mag(), 2);
+		return std::make_pair(v, beta);
+	}
+	std::pair<Matrix, Matrix> toHessenberg() {
+		/* This will transform a matrix to similar one in Hessenberg form 
+		http://webhome.auburn.edu/~tamtiny/lecture%2010.pdf
+		Compute a similar matrix in Hessenberg form using householder transformations
+
+		Not used: http://www.foo.be/docs-free/Numerical_Recipe_In_C/c11-5.pdf 
+		This is a modified version of guassian elimination in order to
+		form a matrix that is Hessenberg form and similar */
+		// verify we have a square matrix
+		if (m != n) { throw NotSquare(); }
+		Matrix Q = Eye(m);
+		Matrix H = (*this);
+		for (int k = 1; k < (n - 1); k++) {
+			// create a limited vector of entries below main diagonal
+			Matrix v(m - k, 1);
+			for (int i = 0; i < (m - k); i++) {
+				v[i][0] = H[i+k][k - 1];
+			}
+
+			// create householder matrix for this limited vector of matrix
+			// P_k = I - 2uu^T when u is a unit vector
+			// find R (lower right matrix)
+			std::pair<Matrix, double> hvect = v.vhouse();
+			Matrix u = hvect.first;
+			double beta = hvect.second;
+			// compute householder matrix
+			Matrix R = Eye(u.m) - (u * u.T() * beta);
+			
+			// need to make new matrix P
+			// P = [I(k), zeros(k, n-k); zeros(n-k, k), R]
+			Matrix P(m, m);
+			for (int i = 0; i < k; i++) {
+				P[i][i] = 1;
+			}
+#pragma omp parallel for
+			for (int i = 0; i < v.m; i++) {
+				for (int j = 0; j < v.m; j++) {
+					P[i + k][j + k] = R[i][j];
+				}
+			}
+			Q = Q * P;
+			H = P * H;
+			H = H * P.T(); 
+			std::cout << H << std::endl;
+			
+		}
+		// after looping through all columns, we return H and Q
+		return std::make_pair(H, Q);
+	}
+	std::pair<Matrix, Matrix> QRAlgorithm() {
+		/* This uses the QR-algorithm to calculate the eigenvalues and eigenvectors of the matrix
 		
 		This is done my repeatedly finding A_k = Q_k * R_k  and then 
 		A_{k+1} = R_{k} * Q_{k} until A_{k+1} is upper-triangular. Then 
@@ -827,7 +888,9 @@ public:
 		details on implementaion and usage of the QR algorithm
 
 		This process can be speed up with Householder reductions first to put the 
-		matrix in Hessenberg form since it is closer to convergence. NOT done here
+		matrix in Hessenberg form since it is closer to convergence. This is implemented 
+		becuase matrices larger than 10 x 10 take a very long time to converge. 
+		Without this, a random 20 x 20 matrix took 4:30 minutes; with this, it took ~2 seconds.
 
 		For complex results, they are stored in 2 x 2 matrices along the diagonal
 		[Re_1, Im_2]
@@ -839,61 +902,66 @@ public:
 		Usage of "shifts" helps increase the speed of convergence
 		H_n - cI = QR
 		 H_{n+1} = RQ + cI 
-		The last diagnoal entry is used here for the shift value */
+		The last two diagnoal entries are used here for the shift value 
+		
+		Eigenvectors are the columns of the product of all of the Q matrices */
 		// two by two matrix we calculate using characteristic 
 		// polynomial and quadratic equation then return real parts
 		if (m == n == 2) { 
 			Matrix values = (*this).EigenvaluesTwoByTwo();
-			std::vector<double> out(2, 0);
-			out[0] = values[0][0];;
-			out[1] = values[1][1];
-			return out;
+			std::pair<Matrix, Matrix> QR_pair = values.QRDecomp();
+			return std::make_pair(values, QR_pair.first);
 		}
 
-		std::pair<Matrix, Matrix> QR_pair = (*this).QRDecomp();
-		Matrix temp1 = QR_pair.second * QR_pair.first;
+		// convert to Hessenberg form first
+		std::pair<Matrix, Matrix> Hess = (*this).toHessenberg();
+		Matrix temp1 = Hess.first;
+		Matrix eigenvects = Hess.second;
+
+		// first QR decomposition
+		std::pair<Matrix, Matrix> QR_pair = temp1.QRDecomp();
+		temp1 = QR_pair.second * QR_pair.first;
+		eigenvects = eigenvects * QR_pair.first;
 		Matrix temp2(m, n);
 		bool escape = false;
+		int flip = 0; // used to designate whether to use last diagonal or second to last
 		while ((!temp1.isTrig()) && (!escape)) {
 			// shift the matrix
-			double factor = temp1[m - 1][m - 1];
+			double factor = temp1[m - 1 - flip][m - 1 - flip];
+			flip = (flip + 1) % 3;
 			temp2 = temp1 - (Eye(m) * factor);
 			// get QR decomposition of our matrix
 			QR_pair = temp2.QRDecomp();
 			// find similar matrix closer to upper triangular
 			temp2 = QR_pair.second * QR_pair.first;
+			// update matrix of eigenvectors
+			eigenvects = eigenvects * QR_pair.first;
 			// unshift matrix
 			temp1 = temp2 + (Eye(m) * factor);
+			std::cout << temp1 << std::endl;
 			// if in complex form, use 2x2 eigenvalue calculations
 			if (temp1.isComplexTrig()) {
 				temp1 = temp1.getFinalEigenvalues();
 				escape = true;
 			}
-			std::cout << temp1 << std::endl;
 		}
-		// currently we return only the real parts of the eigenvalues
+		return std::make_pair(temp1, eigenvects);
+	}
+
+	std::vector<double> Eigenvalues() {
+		/* This uses the QR-algorithm to calculate the REAL eigenvalues of the matrix */
+		std::pair<Matrix, Matrix> eigenPair = (*this).QRAlgorithm();
+		Matrix matrixValues = eigenPair.first;
 		std::vector<double> out(n, 0);
 		for (int i = 0; i < n; i++) {
-			out[i] = temp1[i][i];
+			out[i] = matrixValues[i][i];
 		}
 		return out;
 	}
-	Vector Eigenvector(double eigenvalue) {
-		/* This takes a eigenvalue, and solves for a corresponding real eigenvector
-		Want (A - eigenvalue * I) * x = 0 
-		The first pass of RREF returns the ratios between the elements
-		of the eigenvectors, then the last element is set to 1 and the
-		second pass of RREF solves for the eigenvector 
-		Note: An eigenvalue can have multiple eigenvectors, we
-		calculate just one possible */
-		Matrix temp = (*this) - (Eye(n) * eigenvalue);
-		Matrix equ(n, 1);
-		Matrix ratios = temp.Augment(equ).RREF();
-		ratios[m - 1][n - 1] = 1;
-		ratios[m - 1][n] = 1;
-		Matrix solved = ratios.RREF();
-		Vector solve = solved.GetCol(n);
-		return solve;
+	Matrix Eigenvectors() {
+		/* This returns a matrix of eigenvectors for all eigenvalues */
+		std::pair<Matrix, Matrix> eigenPair = (*this).QRAlgorithm();
+		return eigenPair.second;
 	}
 };
 
