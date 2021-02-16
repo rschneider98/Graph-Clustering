@@ -10,10 +10,11 @@
 #include <iostream>
 #include <exception>
 #include <algorithm>
-#include <utility> 
 #include <cmath>
-#include <vector>
+#include <random>
 #include <string>
+#include <utility> 
+#include <vector>
 #include <omp.h>
 
 namespace LinAlg {
@@ -923,9 +924,9 @@ public:
 		temp1 = QR_pair.second * QR_pair.first;
 		eigenvects = eigenvects * QR_pair.first;
 		Matrix temp2(m, n);
-		bool escape = false;
+		int escape = 0; // do at least 3 iterations for complex numbers so that they are stable
 		int flip = 0; // used to designate whether to use last diagonal or second to last
-		while ((!temp1.isTrig()) && (!escape)) {
+		while ((!temp1.isTrig()) && (escape < 3)) {
 			// shift the matrix
 			double factor = temp1[m - 1 - flip][m - 1 - flip];
 			flip = (flip + 1) % 3;
@@ -942,7 +943,7 @@ public:
 			// if in complex form, use 2x2 eigenvalue calculations
 			if (temp1.isComplexTrig()) {
 				temp1 = temp1.getFinalEigenvalues();
-				escape = true;
+				escape += 1;
 			}
 		}
 		return std::make_pair(temp1, eigenvects);
@@ -962,6 +963,58 @@ public:
 		/* This returns a matrix of eigenvectors for all eigenvalues */
 		std::pair<Matrix, Matrix> eigenPair = (*this).QRAlgorithm();
 		return eigenPair.second;
+	}
+	Vector KMeans(int k) {
+		/* K-Means clustering of m, n-dimensional observations (each row) */
+		int max_iter = 10;
+		int num_ints = 0;
+
+		// get random assignments
+		Vector ass(m, 0);
+		Vector prev_ass = ass;
+		std::default_random_engine generator;
+		std::uniform_int_distribution<int> distribution(0, k - 1);
+		for (int i = 0; i < m; i++) {
+			ass[i] = distribution(generator);
+		}
+		std::cout << ass << std::endl;
+		// iteratively recalculate cluster centroids 
+		Matrix centroid(k, n);
+		while ((prev_ass != ass) && (num_ints < max_iter)) {
+			// find the average of the assigned clusters
+			Vector counts(k, 0);
+			for (int i = 0; i < m; i++) {
+				for (int j = 0; j < n; j++) {
+					centroid[ass[i]][j] += data[i][j];
+				}
+				counts[ass[i]] += 1;
+			}
+			for (int i = 0; i < k; i++) {
+				for (int j = 0; j < n; j++) {
+					centroid[i][j] *= (1 / counts[i]);
+				}
+			}
+			// reassign clusters
+			prev_ass = ass;
+#pragma omp parallel for
+			for (int i = 0; i < m; i++) {
+				double temp;
+				int loc = 0;
+				Vector row = (*this).GetRow(i);
+				double min = (centroid.GetRow(0) - row).mag();
+				for (int j = 1; j < k; j++) {
+					temp = (centroid.GetRow(j) - row).mag();
+					if (temp < min) {
+						min = temp;
+						loc = j;
+					}
+				}
+				ass[i] = loc;
+			}
+			// increment iteration counter
+			num_ints++;
+		}
+		return ass;
 	}
 };
 
