@@ -872,7 +872,6 @@ public:
 			Q = Q * P;
 			H = P * H;
 			H = H * P.T(); 
-			std::cout << H << std::endl;
 			
 		}
 		// after looping through all columns, we return H and Q
@@ -939,7 +938,6 @@ public:
 			eigenvects = eigenvects * QR_pair.first;
 			// unshift matrix
 			temp1 = temp2 + (Eye(m) * factor);
-			std::cout << temp1 << std::endl;
 			// if in complex form, use 2x2 eigenvalue calculations
 			if (temp1.isComplexTrig()) {
 				temp1 = temp1.getFinalEigenvalues();
@@ -977,7 +975,6 @@ public:
 		for (int i = 0; i < m; i++) {
 			ass[i] = distribution(generator);
 		}
-		std::cout << ass << std::endl;
 		// iteratively recalculate cluster centroids 
 		Matrix centroid(k, n);
 		while ((prev_ass != ass) && (num_ints < max_iter)) {

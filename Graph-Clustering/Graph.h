@@ -14,12 +14,11 @@ public:
 	Graph(std::string filename, bool isSymmetric) {
 		/* This function takes in a filename and reads in the matrix from 
 		the (i, j, value) tuples. */
-		// check if file exists
+		bool isFirstLine = true;
 		std::ifstream infile;
 		infile.open(filename, std::ios::in);
 		if (infile.is_open()) {
 			// read lines
-			int max = 0;
 			std::string line;
 			while (std::getline(infile, line))
 			{
@@ -30,35 +29,34 @@ public:
 					int i, j;
 					double value;
 					if (!(iss >> i >> j >> value)) { break; } // error
-					// find max vertex number
-					if (i > max) { max = i; }
-					if (j > max) { max = j; }
-				}
-			}
-			// create square matrix
-			adj = LinAlg::Matrix(max, max);
-			// reread file and add values to matrix
-			infile.seekg(0);
-			while (std::getline(infile, line))
-			{
-				// skip comments in file (uses %)
-				if (line[0] != '%') {
-					// create string stream
-					std::istringstream iss(line);
-					int i, j;
-					double value;
-					if (!(iss >> i >> j >> value)) { break; } // error
-					// find max vertex number
-					adj[i][j] = value;
-					if (isSymmetric) {
-						adj[j][i] = value;
+					// first line contains a different list, it describes the matrix 
+					// size and number of elements - i, j, length
+					if (isFirstLine) {
+						adj = LinAlg::Matrix(i, j);
+						isFirstLine = false;
+					}
+					else {
+						// add entry to the matrix
+						adj[i - 1][j - 1] = value;
+						if (isSymmetric) {
+							adj[j - 1][i - 1] = value;
+						}
 					}
 				}
 			}
-			// close file
 			infile.close();
 		}
 	}
+
+	friend std::ostream& operator<<(std::ostream& out, Graph& rhs) {
+		/* Print out the matrix */
+		out << rhs.adj;
+		return out;
+	}
+	std::vector<double> operator[](int i) {
+		return adj[i];
+	}
+
 	std::pair<LinAlg::Matrix, LinAlg::Vector> EigenClustering(int k) {
 		/* This function takes the adj matrix, finds the 
 		eigenvectors, and clusters the graph into k parts*/
@@ -97,7 +95,7 @@ public:
 		for (int i = 0; i < eigenval[0].size(); i++) {
 			eig[i] = eigenval[i][i];
 		}
-		return std::make_pair(coord, eig);
+		return std::make_pair(coord, clusters);
 	}
 };
 
