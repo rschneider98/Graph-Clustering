@@ -16,8 +16,7 @@ int main()
 {
 	// read in the matrix as a graph
 	Graph::Graph test1("../Data/power-494-bus.mtx", true);
-	std::cout << std::to_string(test1[493][493]) << std::endl;
-	std::pair<LinAlg::Matrix, LinAlg::Vector> clusters = test1.EigenClustering();
+	std::pair<LinAlg::Matrix, LinAlg::Vector> clusters = test1.EigenClustering(7);
 	clusters.first.toFile("../Data/coords.mtx");
 	clusters.second.toFile("../Data/clusters.txt");
 	return 0;

@@ -958,11 +958,15 @@ public:
 		std::pair<Matrix, Matrix> Hess = (*this).toHessenberg();
 		Matrix temp1 = Hess.first;
 		Matrix eigenvects = Hess.second;
+		std::cout << "In Hessenberg Form" << std::endl;
 
 		// first QR decomposition
 		std::pair<Matrix, Matrix> QR_pair = temp1.QRDecomp();
 		temp1 = QR_pair.second * QR_pair.first;
 		eigenvects = eigenvects * QR_pair.first;
+		int count = 1;
+		std::cout << "Count: " << std::endl;
+		std::cout << std::to_string(count) << "\r";
 		Matrix temp2(m, n);
 		int escape = 0; // do at least 3 iterations for complex numbers so that they are stable
 		int flip = 0; // used to designate whether to use last diagonal or second to last
@@ -984,6 +988,8 @@ public:
 				temp1 = temp1.getFinalEigenvalues();
 				escape += 1;
 			}
+			count++;
+			std::cout << std::to_string(count) << "\r";
 		}
 		return std::make_pair(temp1, eigenvects);
 	}
