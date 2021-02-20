@@ -11,7 +11,9 @@
 #include <exception>
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <random>
+#include <sstream>
 #include <string>
 #include <utility> 
 #include <vector>
@@ -163,6 +165,17 @@ public:
 		}
 		out << "]" << std::endl;
 		return out;
+	}
+	void toFile(std::string fname) {
+		std::ofstream outfile;
+		outfile.open(fname, std::ios::out);
+		if (outfile.is_open()) {
+			// read lines
+			for (int i = 0; i < data.size(); i++) {
+				outfile << std::to_string(data[i]) << std::endl;
+			}
+			outfile.close();
+		}
 	}
 	double mag() {
 		/* Returns the magnitude of the vector, also known as the absolute value or length */
@@ -431,6 +444,34 @@ public:
 			out << std::endl;
 		}
 		return out;
+	}
+	void toFile(std::string fname) {
+		std::ofstream outfile;
+		outfile.open(fname, std::ios::out);
+		if (outfile.is_open()) {
+			// write to a temp stringstream and count number of nonzero elements
+			int num_elem = 0;
+			std::stringstream temp;
+			for (int i = 0; i < m; i++) {
+				for (int j = 0; j < n; j++) {
+					if (std::abs(data[i][j]) > 1e-6) {
+						num_elem++;
+						temp << std::to_string(i) << " ";
+						temp << std::to_string(j) << " ";
+						temp << std::to_string(data[i][j]) << std::endl;
+					}
+				}
+			}
+			// output header of Matrix Market file
+			outfile << "%%MatrixMarket matrix coordinate real general"
+				"%= ================================================================================\n"
+				"%\n"
+				"%This ASCII file represents a sparse MxN matrix with L\n"
+				"% nonzeros in the following Matrix Market format :\n";
+			outfile << std::to_string(m) << " " << std::to_string(n) << " " << std::to_string(num_elem) << std::endl;
+			outfile << temp.rdbuf();
+			outfile.close();
+		}
 	}
 
 
