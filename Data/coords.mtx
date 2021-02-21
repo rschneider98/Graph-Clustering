@@ -1,0 +1,5 @@
+%%MatrixMarket matrix coordinate real general%= ================================================================================
+%
+%This ASCII file represents a sparse MxN matrix with L
+% nonzeros in the following Matrix Market format :
+50 2 0

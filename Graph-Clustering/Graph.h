@@ -62,8 +62,14 @@ public:
 		eigenvectors, and clusters the graph into k parts*/
 		// find eigenvectors and cluster vectors
 		std::pair<LinAlg::Matrix, LinAlg::Matrix> eig_pair = adj.QRAlgorithm();
-		LinAlg::Matrix eigenvects = eig_pair.first;
-		LinAlg::Matrix eigenval = eig_pair.second;
+		std::cout << "QR Output:" << std::endl;
+		//std::cout << eig_pair.first << std::endl;
+		//std::cout << eig_pair.second << std::endl;
+		eig_pair.first.toFile("../Data/testEigenvalues.mtx");
+		eig_pair.second.toFile("../Data/testEigenvectors.mtx");
+
+		LinAlg::Matrix eigenval = eig_pair.first;
+		LinAlg::Matrix eigenvects = eig_pair.second;
 		LinAlg::Vector clusters = eigenvects.KMeans(k);
 
 		// find two largest eigenvalues and make coordinate matrix for output

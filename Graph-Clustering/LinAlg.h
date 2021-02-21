@@ -880,9 +880,14 @@ public:
 		form a matrix that is Hessenberg form and similar */
 		// verify we have a square matrix
 		if (m != n) { throw NotSquare(); }
+		int colNum = 0;
 		Matrix Q = Eye(m);
 		Matrix H = (*this);
+		std::cout << "Column Number for Householder Transformations" << std::endl;
 		for (int k = 1; k < (n - 1); k++) {
+			// update CLI about status
+			colNum++;
+			std::cout << std::to_string(colNum) << "\r";
 			// create a limited vector of entries below main diagonal
 			Matrix v(m - k, 1);
 			for (int i = 0; i < (m - k); i++) {
@@ -898,6 +903,7 @@ public:
 			// compute householder matrix
 			Matrix R = Eye(u.m) - (u * u.T() * beta);
 			
+			
 			// need to make new matrix P
 			// P = [I(k), zeros(k, n-k); zeros(n-k, k), R]
 			Matrix P(m, m);
@@ -910,13 +916,96 @@ public:
 					P[i + k][j + k] = R[i][j];
 				}
 			}
+
+			/*
+			//Q = Q * P;
+			// P contains an identity part so we will ignore that section
+			Matrix temp1(m - k, n - k);
+#pragma omp parallel for
+			for (int i = k; i < m; i++) {
+				for (int j = k; j < n; j++) {
+					for (int s = k; s < n; s++) {
+						temp1[i - k][j - k] += Q[i][s] * P[s][j];
+					}
+				}
+			}
+			// write the data from temp to Q
+#pragma omp parallel for
+			for (int i = k; i < m; i++) {
+				for (int j = k; j < n; j++) {
+					Q[i][j] = temp1[i - k][j - k];
+				}
+			}
+
+			//H = P * H;
+			// P contains an identity part so we will ignore that section
+#pragma omp parallel for
+			Matrix temp2(m - k, n - k);
+			for (int i = k; i < m; i++) {
+				for (int j = k; j < n; j++) {
+					for (int s = k; s < n; s++) {
+						temp2[i - k][j - k] += P[i][s] * H[s][j];
+					}
+				}
+			}
+			// write the data from temp to H
+#pragma omp parallel for
+			for (int i = k; i < m; i++) {
+				for (int j = k; j < n; j++) {
+					H[i][j] = temp2[i - k][j - k];
+				}
+			}
+			// reset temp
+			Matrix temp3(m - k, n - k);
+			// H = H * P.T()
+			// P contains an identity part so we will ignore that section
+#pragma omp parallel for
+			for (int i = k; i < m; i++) {
+				for (int j = k; j < n; j++) {
+					for (int s = k; s < n; s++) {
+						temp3[i - k][j - k] += H[i][s] * P[j][s];
+					}
+				}
+			}
+			// write the data from temp to H
+#pragma omp parallel for
+			for (int i = k; i < m; i++) {
+				for (int j = k; j < n; j++) {
+					H[i][j] = temp3[i - k][j - k];
+				}
+			}	*/
 			Q = Q * P;
 			H = P * H;
-			H = H * P.T(); 
-			
+			H = H * P.T();
+
+		}
+		// error check if there is NaNs and trim matrix
+		int max = 0;
+		for (int i = 0; i < n; i++) {
+			if (!std::isnan(H[i][i])) {
+				max = i;
+			}
+		}
+		Matrix H_out(max, max);
+
+#pragma omp parallel for
+		for (int i = 0; i < max; i++) {
+			for (int j = 0; j < max; j++) {
+				H_out[i][j] = H[i][j];
+			}
+		}
+
+		Matrix Q_out(m, max);
+
+#pragma omp parallel for
+		for (int i = 0; i < m; i++) {
+			for (int j = 0; j < max; j++) {
+				Q_out[i][j] = Q[i][j];
+			}
 		}
 		// after looping through all columns, we return H and Q
-		return std::make_pair(H, Q);
+		std::cout << std::endl;
+		return std::make_pair(H_out, Q_out);
 	}
 	std::pair<Matrix, Matrix> QRAlgorithm() {
 		/* This uses the QR-algorithm to calculate the eigenvalues and eigenvectors of the matrix
@@ -958,7 +1047,9 @@ public:
 		std::pair<Matrix, Matrix> Hess = (*this).toHessenberg();
 		Matrix temp1 = Hess.first;
 		Matrix eigenvects = Hess.second;
-		std::cout << "In Hessenberg Form" << std::endl;
+		std::cout << "In Hessenberg Form (Q, H):" << std::endl;
+		//std::cout << eigenvects << std::endl;
+		//std::cout << temp1 << std::endl;
 
 		// first QR decomposition
 		std::pair<Matrix, Matrix> QR_pair = temp1.QRDecomp();
@@ -967,14 +1058,15 @@ public:
 		int count = 1;
 		std::cout << "Count: " << std::endl;
 		std::cout << std::to_string(count) << "\r";
-		Matrix temp2(m, n);
+		//std::cout << temp1 <<std::endl;
+		Matrix temp2(temp1.m, temp1.n);
 		int escape = 0; // do at least 3 iterations for complex numbers so that they are stable
 		int flip = 0; // used to designate whether to use last diagonal or second to last
-		while ((!temp1.isTrig()) && (escape < 3)) {
+		while ((!temp1.isTrig()) && (escape < 3) && (count < 6000)) {
 			// shift the matrix
-			double factor = temp1[m - 1 - flip][m - 1 - flip];
+			double factor = temp1[temp1.m - 1 - flip][temp1.m - 1 - flip];
 			flip = (flip + 1) % 3;
-			temp2 = temp1 - (Eye(m) * factor);
+			temp2 = temp1 - (Eye(temp1.m) * factor);
 			// get QR decomposition of our matrix
 			QR_pair = temp2.QRDecomp();
 			// find similar matrix closer to upper triangular
@@ -982,7 +1074,7 @@ public:
 			// update matrix of eigenvectors
 			eigenvects = eigenvects * QR_pair.first;
 			// unshift matrix
-			temp1 = temp2 + (Eye(m) * factor);
+			temp1 = temp2 + (Eye(temp1.m) * factor);
 			// if in complex form, use 2x2 eigenvalue calculations
 			if (temp1.isComplexTrig()) {
 				temp1 = temp1.getFinalEigenvalues();
@@ -990,6 +1082,7 @@ public:
 			}
 			count++;
 			std::cout << std::to_string(count) << "\r";
+			//std::cout << temp1 <<std::endl;
 		}
 		return std::make_pair(temp1, eigenvects);
 	}
