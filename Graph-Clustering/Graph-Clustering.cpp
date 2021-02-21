@@ -15,8 +15,8 @@
 int main()
 {
 	// read in the matrix as a graph
-	Graph::Graph test1("../Data/test.mtx", true);
-	std::pair<LinAlg::Matrix, LinAlg::Vector> clusters = test1.EigenClustering(7);
+	Graph::Graph test1("../Data/testLaplacian.mtx", true);
+	std::pair<LinAlg::Matrix, LinAlg::Vector> clusters = test1.EigenClustering(5);
 	clusters.first.toFile("../Data/coords.mtx");
 	clusters.second.toFile("../Data/clusters.txt");
 	return 0;

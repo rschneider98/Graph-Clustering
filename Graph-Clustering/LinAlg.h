@@ -463,12 +463,12 @@ public:
 				}
 			}
 			// output header of Matrix Market file
-			outfile << "%%MatrixMarket matrix coordinate real general"
+			outfile << "%%MatrixMarket matrix coordinate real general\n"
 				"%= ================================================================================\n"
 				"%\n"
 				"%This ASCII file represents a sparse MxN matrix with L\n"
 				"% nonzeros in the following Matrix Market format :\n";
-			outfile << std::to_string(m) << " " << std::to_string(n) << " " << std::to_string(num_elem) << std::endl;
+			outfile << std::to_string(m + 1) << " " << std::to_string(n + 1) << " " << std::to_string(num_elem) << std::endl;
 			outfile << temp.rdbuf();
 			outfile.close();
 		}
